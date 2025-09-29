@@ -1,53 +1,39 @@
 import express from "express";
-import fetch from "node-fetch";
-import cors from "cors";
-import dotenv from "dotenv";
+import bodyParser from "body-parser";
+import path from "path";
+import { fileURLToPath } from "url";
+import { fillPdf } from "./pdfService.js";
 
-dotenv.config();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 const app = express();
-app.use(cors());
-app.use(express.json());
+app.use(bodyParser.json({ limit: "10mb" }));
 
-const BASE_URL = "https://connect.squareup.com/v2";
-const SQUARE_TOKEN = process.env.SQUARE_TOKEN;
-const LOCATION_ID = process.env.SQUARE_LOCATION_ID;
+// PDF signing route
+app.post("/sign-pdf", async (req, res) => {
+  try {
+    const { docType, fields, signature } = req.body;
 
-async function squareFetch(endpoint, method = "GET", body = null) {
-  const res = await fetch(`${BASE_URL}/${endpoint}`, {
-    method,
-    headers: {
-      "Authorization": `Bearer ${SQUARE_TOKEN}`,
-      "Content-Type": "application/json",
-    },
-    body: body ? JSON.stringify(body) : null,
-  });
-  return res.json();
-}
+    const templateMap = {
+      "return": "templates/Return and Refund Policy.pdf",
+      "delivery": "templates/MSI Delivery Policy.pdf",
+      "qty": "templates/Order Quantity Policy.pdf",
+      "auth": "templates/Credit Debit Card Authorization Form.pdf",
+    };
 
-// Get customers
-app.get("/customers", async (req, res) => {
-  res.json(await squareFetch("customers"));
-});
-
-// Get catalog items
-app.get("/items", async (req, res) => {
-  res.json(await squareFetch("catalog/list"));
-});
-
-// Get open orders (tickets)
-app.get("/orders", async (req, res) => {
-  const body = {
-    location_ids: [LOCATION_ID],
-    query: {
-      filter: { state_filter: { states: ["OPEN"] } }
+    if (!templateMap[docType]) {
+      return res.status(400).json({ error: "Invalid docType" });
     }
-  };
-  res.json(await squareFetch("orders/search", "POST", body));
-});
 
-// Get single order details
-app.get("/orders/:id", async (req, res) => {
-  res.json(await squareFetch(`orders/${req.params.id}`));
+    const outputPath = path.resolve(__dirname, `signed/${docType}-${Date.now()}.pdf`);
+    await fillPdf(path.resolve(__dirname, templateMap[docType]), fields, signature, outputPath);
+
+    res.download(outputPath);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to sign PDF" });
+  }
 });
 
 app.listen(4000, () => console.log("Backend running on http://localhost:4000"));
