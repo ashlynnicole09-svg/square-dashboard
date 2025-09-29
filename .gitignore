@@ -1,0 +1,12 @@
+# Node.js dependencies
+node_modules/
+
+# Environment files
+.env
+
+# Signed PDFs (don’t commit generated contracts)
+signed/*.pdf
+
+# Build / dist outputs
+dist/
+build/
